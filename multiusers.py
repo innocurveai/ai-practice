@@ -102,10 +102,6 @@ refresh_secrets()
 # 로깅
 # ──────────────────────────────────────────────
 def setup_logging() -> logging.Logger:
-    log_dir = PROJECT_ROOT / "logs"
-    log_dir.mkdir(exist_ok=True)
-    log_file = log_dir / f"multiusers_{datetime.now().strftime('%Y%m%d')}.log"
-
     logger = logging.getLogger("multi_user_rag")
     logger.setLevel(logging.WARNING)
     logger.handlers.clear()
@@ -114,16 +110,30 @@ def setup_logging() -> logging.Logger:
         "%(asctime)s [%(levelname)s] %(name)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
-    file_handler.setLevel(logging.WARNING)
-    file_handler.setFormatter(formatter)
 
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.WARNING)
     console_handler.setFormatter(formatter)
-
-    logger.addHandler(file_handler)
     logger.addHandler(console_handler)
+
+    # Streamlit Cloud는 소스(/mount/src)가 읽기 전용이라 logs 생성이 실패한다.
+    # 쓰기 가능한 경로를 찾고, 불가능하면 콘솔 로그만 사용한다.
+    log_candidates = [
+        PROJECT_ROOT / "logs",
+        Path(tempfile.gettempdir()) / "ktena_logs",
+    ]
+    for log_dir in log_candidates:
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file = log_dir / f"multiusers_{datetime.now().strftime('%Y%m%d')}.log"
+            file_handler = logging.FileHandler(log_file, encoding="utf-8")
+            file_handler.setLevel(logging.WARNING)
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+            break
+        except OSError:
+            continue
+
     logger.propagate = False
 
     for noisy_logger in (
